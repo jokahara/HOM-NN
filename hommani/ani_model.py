@@ -1,4 +1,3 @@
-
 import math
 from typing import Any, Dict, Tuple, Optional
 from pytorch_lightning.utilities.types import STEP_OUTPUT
@@ -13,12 +12,15 @@ from torchani.units import hartree2kcalmol
 
 
 class CustomAniNet(L.LightningModule):
-    def __init__(self, pretrained_model):
+    def __init__(self, pretrained_model=None, train_on="H,C,N,O,S".split(',')):
         super().__init__()
+        if pretrained_model == None:
+            print('Error! Pretrained model was not loaded!'); exit()
 
         self.energy_shifter = pretrained_model.energy_shifter
         self.species_to_tensor = pretrained_model.species_to_tensor
         self.species = pretrained_model.species
+        self.species_to_train = train_on
         self.nn = nn.Sequential(pretrained_model.aev_computer, pretrained_model.neural_networks)
 
         self.batch_loss = nn.MSELoss(reduction='none')
@@ -112,16 +114,15 @@ class CustomAniNet(L.LightningModule):
         self.automatic_optimization = False
         nn = self.nn[1]
         
-        species = self.species[:-2]
         # Setup optimizers for two middle layers. Input and output layers are kept fixed.
         params = []
-        for s in species:
+        for s in self.species_to_train:
             params.append({'params': [nn[s][2].weight], 'weight_decay': 0.00001})
             params.append({'params': [nn[s][4].weight], 'weight_decay': 0.000001})
         AdamW = torch.optim.AdamW(params, lr=1e-3)
 
         params = []
-        for s in species:
+        for s in self.species_to_train:
             params.append({'params': [nn[s][2].bias]})
             params.append({'params': [nn[s][4].bias]})
         SGD = torch.optim.SGD(params, lr=1e-3)

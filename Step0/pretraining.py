@@ -1,4 +1,5 @@
-import os
+
+import os, sys
 import argparse
 
 import torch
@@ -6,10 +7,13 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import pytorch_lightning as L
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 import torchani
 #from torchani.units import hartree2kcalmol
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from hommani.ani_model import CustomAniNet
 from hommani.datasets import CustomDataset, load_dataset
@@ -26,32 +30,43 @@ def main():
                         help='number of nodes')
     parser.add_argument('--epochs', default=10, type=int, metavar='N',
                         help='maximum number of epochs to run')
+    parser.add_argument('--atoms', default="H,C,N,O,S", type=str, metavar='N',
+                        help='Atoms to train the model on')
+    parser.add_argument('--data', default="/home/jokahara/PhD/Datasets/ACDB.h5", type=str, metavar='N',
+                        help='Path to training data')
     args = parser.parse_args()
-
+    
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
     latest_checkpoint = 'checkpoint.ckpt'
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
     
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
-    # Load pretrained ANI-2x model
-    model = CustomAniNet(ani2x)
-    model.nn.load_state_dict(torch.load('best.pt', map_location='cpu'))
-    #if ckpt_path:
-        #model = model.load_from_checkpoint(ckpt_path)
+    if ckpt_path:
+        # load from latest checkpoint
+        model = CustomAniNet.load_from_checkpoint(ckpt_path, pretrained_model=ani2x)
+    else:
+        # Initialize from pretrained ANI-2x model
+        ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
+        model = CustomAniNet(ani2x)
+        model.species_to_train = args.atoms.split(',')
     
+    print("Training on atoms:", model.species_to_train)
     batch_size = 256
-    training1, validation1, self_energies = load_dataset('../data/ACDB_forces.h5', 0.8, model.energy_shifter, model.species)
+    
+    training1, validation1, energy_shifter = load_dataset(args.data, 0.8, model.energy_shifter, model.species)
     #training2, validation2, self_energies = load_dataset('../data/2sa.h5', 0.1, model.energy_shifter, model.species)
 
-    train_set = CustomDataset(training1)
-    train_loader = DataLoader(train_set, batch_size=batch_size,
+    training1 =  torchani.data.TransformableIterable(list(training1))
+    train_loader = DataLoader(CustomDataset(training1), batch_size=batch_size,
                               num_workers=10, pin_memory=True)
-    val_set = CustomDataset(validation1)
-    val_loader = DataLoader(val_set, batch_size=batch_size,
+    val_loader = DataLoader(CustomDataset(validation1), batch_size=batch_size,
                             num_workers=10, pin_memory=True)
     
-    checkpoint_callback = ModelCheckpoint(dirpath="",filename=latest_checkpoint)
+    checkpoint_callback = ModelCheckpoint(dirpath="",
+                                          filename=latest_checkpoint,
+                                          save_top_k=1,
+                                          monitor='validation_rmse')
     trainer = L.Trainer(devices=args.gpus,
                         num_nodes=args.nodes,
                         max_epochs=args.epochs,
@@ -61,6 +76,7 @@ def main():
                         strategy='ddp_find_unused_parameters_true',
                         callbacks=[checkpoint_callback],
                         log_every_n_steps=1)
+    
     trainer.validate(model, val_loader)
     
     from datetime import datetime
@@ -70,9 +86,7 @@ def main():
     print('Training took {}'.format(dt))
 
     trainer.validate(model, val_loader)
-
     trainer.save_checkpoint(latest_checkpoint)
-
 
 if __name__ == '__main__':
     main()

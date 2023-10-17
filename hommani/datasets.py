@@ -1,7 +1,7 @@
 import os
 import pickle
 import time
-from itertools import chain
+#from itertools import chain
 
 import torchani
 from torch.utils.data import Dataset
@@ -16,7 +16,7 @@ def load_dataset(file, split=0.8, energy_shifter=None, species_order=None):
     except NameError:
         path = os.getcwd()
     dspath = os.path.join(path, file)
-
+    
     pickled_dataset_path = file.split('/')[-1].split('.')[0]+'.pkl'
     # We pickle the dataset after loading to ensure we use the same validation set
     # each time we restart training, otherwise we risk mixing the validation and
@@ -35,6 +35,7 @@ def load_dataset(file, split=0.8, energy_shifter=None, species_order=None):
         elif rank == 0:
             print(f'Processing dataset in {dspath}')
             data = torchani.data.load(dspath, additional_properties=('forces',))
+
             if energy_shifter == None:
                 energy_shifter = torchani.utils.EnergyShifter(None)
                 data = data.subtract_self_energies(energy_shifter, species_order)\
@@ -45,7 +46,6 @@ def load_dataset(file, split=0.8, energy_shifter=None, species_order=None):
                     data[i]['energies'] -= energy_shifter.self_energies[par['species']].sum().item()
                 data = torchani.data.TransformableIterable(iter(data))
             training, validation = data.shuffle().split(split, None)
-
             save_pickled_dataset(pickled_dataset_path, training, validation, energy_shifter)
             break
         else:

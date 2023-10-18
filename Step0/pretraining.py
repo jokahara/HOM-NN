@@ -41,8 +41,9 @@ def main():
     latest_checkpoint = 'latest.ckpt'
     ls = os.listdir()
     for file in ls:
-        print(file)
-    exit()
+        if file.split('.')[-1] == 'ckpt':
+            if file.split('.')[0].split('-')[0] == 'latest':
+                latest_checkpoint = file
     
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
     

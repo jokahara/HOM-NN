@@ -23,9 +23,9 @@ def main():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
     latest_checkpoint = 'checkpoint.ckpt'
-    ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
+    ckpt_path = None# latest_checkpoint if os.path.isfile(latest_checkpoint) else None
     
-    best_model = 'best.pt'
+    best_model = '../best1e-06.pt'
     
     print(0)
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
@@ -40,18 +40,22 @@ def main():
     model.nn.load_state_dict(torch.load(best_model, map_location='cpu'))
     model.eval()
     model.freeze()
-    print(1)
+
     batch_size = 256
-    training, validation, energy_shifter = load_dataset('/home/jokahara/PhD/Datasets/ACDB.h5', 0.8, model.energy_shifter, model.species)
+
+    #energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
+
+    training, validation, energy_shifter = load_dataset('/home/jokahara/PhD/Datasets/ACDB.h5', 0.8)
     #test, _, _ = load_dataset('../data/4sa.h5', 0.05, energy_shifter, model.species)
 
-    print(2)
     print('Self atomic energies: ', energy_shifter.self_energies)
+    for i, e, in enumerate(energy_shifter.self_energies):
+        print(str(i)+'='+str(e.item()))
+    exit()
 
     val_loader = DataLoader(CustomDataset(validation), batch_size=batch_size,
                             num_workers=8, pin_memory=True)
 
-    print(3)
     predicted_energies = []
     true_energies = []
     num_atoms = []
@@ -65,7 +69,7 @@ def main():
         predicted_energies = np.append(predicted_energies, model(species, coordinates).detach().numpy())
         if i>10:
             break
-
+    
     x = hartree2kcalmol(true_energies)
     y = hartree2kcalmol(predicted_energies)
     rmse = model.mse(Tensor(x),Tensor(y)).sqrt().item()

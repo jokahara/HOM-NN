@@ -6,11 +6,11 @@ import time
 import torchani
 from torch.utils.data import Dataset
 
-def load_dataset(file, split=0.8, energy_shifter=None, species_order=None):
+def load_dataset(file,  split=0.8, energy_shifter=None, species_order=['H', 'C', 'N', 'O', 'S']):
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-
+    
     try:
         path = os.path.dirname(os.path.realpath(__file__))
     except NameError:
@@ -35,7 +35,7 @@ def load_dataset(file, split=0.8, energy_shifter=None, species_order=None):
         elif rank == 0:
             print(f'Processing dataset in {dspath}')
             data = torchani.data.load(dspath, additional_properties=('forces',))
-
+            
             if energy_shifter == None:
                 energy_shifter = torchani.utils.EnergyShifter(None)
                 data = data.subtract_self_energies(energy_shifter, species_order)\
@@ -47,6 +47,7 @@ def load_dataset(file, split=0.8, energy_shifter=None, species_order=None):
                 data = torchani.data.TransformableIterable(iter(data))
             training, validation = data.shuffle().split(split, None)
             save_pickled_dataset(pickled_dataset_path, training, validation, energy_shifter)
+            
             break
         else:
             time.sleep(1)

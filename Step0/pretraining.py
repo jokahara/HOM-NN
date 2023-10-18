@@ -32,7 +32,7 @@ def main():
                         help='maximum number of epochs to run')
     parser.add_argument('--atoms', default="H,C,N,O,S", type=str, metavar='N',
                         help='Atoms to train the model on')
-    parser.add_argument('--data', default="/home/jokahara/PhD/Datasets/ACDB.h5", type=str, metavar='N',
+    parser.add_argument('--data', default="/home/jokahara/PhD/Datasets/ACDB_QM7.h5", type=str, metavar='N',
                         help='Path to training data')
     args = parser.parse_args()
     
@@ -54,8 +54,12 @@ def main():
     print("Training on atoms:", model.species_to_train)
     batch_size = 256
     
-    training1, validation1, energy_shifter = load_dataset(args.data, 0.8, model.energy_shifter, model.species)
-    #training2, validation2, self_energies = load_dataset('../data/2sa.h5', 0.1, model.energy_shifter, model.species)
+    energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
+
+    training1, validation1, energy_shifter = load_dataset(args.data, 0.8, energy_shifter)
+    #model.energy_shifter = energy_shifter
+
+    print('Self atomic energies: ', energy_shifter.self_energies)
 
     training1 =  torchani.data.TransformableIterable(list(training1))
     train_loader = DataLoader(CustomDataset(training1), batch_size=batch_size,

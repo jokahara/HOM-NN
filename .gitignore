@@ -1,0 +1,7 @@
+data
+__pycache__
+lightning_logs
+*pt
+*/*pt
+*pkl
+*/*pkl

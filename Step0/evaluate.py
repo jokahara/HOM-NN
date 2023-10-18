@@ -1,6 +1,10 @@
 import os, sys
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
+
+import seaborn
+seaborn.set()
 
 import torch
 from torch import Tensor
@@ -22,20 +26,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def main():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
-    latest_checkpoint = 'checkpoint.ckpt'
-    ckpt_path = None# latest_checkpoint if os.path.isfile(latest_checkpoint) else None
-    
-    best_model = '../best1e-06.pt'
-    
-    print(0)
+    latest_checkpoint = 'latest.ckpt'
+    best_model = 'Step0/best.pt'
+
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
-    if ckpt_path:
-        # load from latest checkpoint
-        model = CustomAniNet.load_from_checkpoint(ckpt_path, pretrained_model=ani2x)
-    else:
-        # Initialize from pretrained ANI-2x model
-        ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
-        model = CustomAniNet(ani2x)
+    model = CustomAniNet(ani2x)
 
     model.nn.load_state_dict(torch.load(best_model, map_location='cpu'))
     model.eval()
@@ -43,15 +38,12 @@ def main():
 
     batch_size = 256
 
-    #energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
-
-    training, validation, energy_shifter = load_dataset('/home/jokahara/PhD/Datasets/ACDB.h5', 0.8)
+    energy_shifter, sae_dict = torchani.neurochem.load_sae('sae_linfit.dat', return_dict=True)
+    
+    training, validation, energy_shifter = load_dataset('/home/jokahara/PhD/Datasets/ACDB_QM7.h5', 0.8)
     #test, _, _ = load_dataset('../data/4sa.h5', 0.05, energy_shifter, model.species)
 
     print('Self atomic energies: ', energy_shifter.self_energies)
-    for i, e, in enumerate(energy_shifter.self_energies):
-        print(str(i)+'='+str(e.item()))
-    exit()
 
     val_loader = DataLoader(CustomDataset(validation), batch_size=batch_size,
                             num_workers=8, pin_memory=True)
@@ -81,8 +73,13 @@ def main():
     print(np.sum(loss > 2), 'left outsite range, max = ', np.max(loss))
 
     plt.subplot(121)
-    plt.plot(x, y, '.')
-    plt.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'r--')
+    xy = np.vstack([x,y])
+    z = gaussian_kde(xy)(xy)
+    idx = z.argsort()
+    x, y, z = x[idx], y[idx], z[idx]
+    plt.scatter(x, y, c=z, s=2)
+    #plt.plot(x, y, '.')
+    #plt.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'r--')
     plt.title('RMSE = ' + str(rmse) + ' kcal/mol')
     plt.xlabel('Expected (kcal/mol)')
     plt.ylabel('Predicted (kcal/mol)')

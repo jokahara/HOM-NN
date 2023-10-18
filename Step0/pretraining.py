@@ -38,7 +38,12 @@ def main():
     
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
-    latest_checkpoint = 'checkpoint.ckpt'
+    latest_checkpoint = 'latest.ckpt'
+    ls = os.listdir()
+    for file in ls:
+        print(file)
+    exit()
+    
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
     
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
@@ -68,7 +73,7 @@ def main():
                             num_workers=10, pin_memory=True)
     
     checkpoint_callback = ModelCheckpoint(dirpath="",
-                                          filename=latest_checkpoint,
+                                          filename="latest-{epoch:02d}-{validation_rmse:.2f}",
                                           save_top_k=1,
                                           monitor='validation_rmse')
     trainer = L.Trainer(devices=args.gpus,

@@ -59,8 +59,6 @@ def main():
         # run validation
         true_energies = np.append(true_energies, true)
         predicted_energies = np.append(predicted_energies, model(species, coordinates).detach().numpy())
-        if i>10:
-            break
     
     x = hartree2kcalmol(true_energies)
     y = hartree2kcalmol(predicted_energies)
@@ -79,18 +77,18 @@ def main():
     x, y, z = x[idx], y[idx], z[idx]
     plt.scatter(x, y, c=z, s=2)
     #plt.plot(x, y, '.')
-    #plt.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'r--')
-    plt.title('RMSE = ' + str(rmse) + ' kcal/mol')
+    plt.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'r--', lw=1)
+    plt.title('RMSE = ' + str(rmse)[:7] + ' kcal/mol')
     plt.xlabel('Expected (kcal/mol)')
     plt.ylabel('Predicted (kcal/mol)')
 
     plt.subplot(122)
     plt.hist(loss[loss < 2], bins=50)
     plt.plot([0.4, 0.4], [0, 1000], 'r--')
-    plt.title('MAE = ' + str(np.mean(loss)) + ' kcal/mol/atom')
-    plt.xlabel('Absolute error / sqrt(atom) (kcal/mol)')
+    plt.title('MAE = ' + str(np.mean(loss))[:7] + ' kcal/mol')
+    plt.xlabel('Absolute error / sqrt(N) (kcal/mol)')
     plt.xlim(0,2)
-    plt.ylim(ymin=0)
+    plt.ylim(0,500)
 
     plt.show()
 

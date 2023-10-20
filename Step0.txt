@@ -1,0 +1,5 @@
+gpus    4
+epochs  5000
+atom    H,C,N,O
+model   ANI-0
+data    /scratch/hvehkama/kaharaja/Datasets/ACDB/ACDB_QM7.h5

@@ -20,25 +20,43 @@ from hommani.datasets import CustomDataset, load_dataset
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-#from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold
 
-def main():
+def parse_input():
     parser = argparse.ArgumentParser()
+    parser.add_argument('-f', default=None, type=argparse.FileType('r'), metavar='file.txt',
+                        help='input file with arguments')
     parser.add_argument('--gpus', default=1, type=int, metavar='N',
                         help='number of GPUs per node')
     parser.add_argument('--nodes', default=1, type=int, metavar='N',
                         help='number of nodes')
     parser.add_argument('--epochs', default=10, type=int, metavar='N',
                         help='maximum number of epochs to run')
-    parser.add_argument('--atoms', default="H,C,N,O,S", type=str, metavar='N',
-                        help='Atoms to train the model on')
-    parser.add_argument('--data', default="/home/jokahara/PhD/Datasets/ACDB_QM7.h5", type=str, metavar='N',
-                        help='Path to training data')
+    parser.add_argument('--atoms', default='H,C,N,O,S', type=str, metavar='H,C,O',
+                        help='atoms to train the model on')
+    parser.add_argument('--model', default='ani-0', type=str, metavar='ani-1',
+                        help='model to train')
+    parser.add_argument('--data', default='', type=str, metavar='/path/data.h5',
+                        help='path to training data')
+    parser.add_argument('--ckpt', default='latest', type=str, metavar='latest',
+                        help='prefix for checkpoint files')
     args = parser.parse_args()
+    if args.f:
+        for arg in args.f.readlines():
+            arg = list(filter(None, ('--'+arg.strip()).split(' ') ))
+            args = parser.parse_args(arg, args)
     
+    if args.data == '':
+        print('Error: --data input file was not found');exit()
+
+    return args
+        
+def init():
+    
+    args = parse_input()
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
-    
-    latest_checkpoint = 'latest.ckpt'
+
+    latest_checkpoint = args.ckpt+'ckpt'
     ls = os.listdir()
     for file in ls:
         if file.split('.')[-1] == 'ckpt':
@@ -46,14 +64,19 @@ def main():
                 latest_checkpoint = file
     
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
-    
-    ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
+
+    m_type, m_index = args.model.split('-')
+    if m_type.lower() != 'ani':
+        print("Error: incorrect model type given. (expecting ani)"); exit()
+
+    print('Training '+m_type+'-model index '+m_index)
+
+    ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=int(m_index))
     if ckpt_path:
         # load from latest checkpoint
         model = CustomAniNet.load_from_checkpoint(ckpt_path, pretrained_model=ani2x)
     else:
         # Initialize from pretrained ANI-2x model
-        ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=0)
         model = CustomAniNet(ani2x)
         model.species_to_train = args.atoms.split(',')
     
@@ -62,15 +85,15 @@ def main():
     
     energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
 
-    training1, validation1, energy_shifter = load_dataset(args.data, 0.8, energy_shifter)
+    training, validation, energy_shifter = load_dataset(args.data, 0.8, energy_shifter)
     #model.energy_shifter = energy_shifter
-
+    kf = KFold(n_splits=8)
+    kf.get_n_splits()
     print('Self atomic energies: ', energy_shifter.self_energies)
 
-    training1 =  torchani.data.TransformableIterable(list(training1))
-    train_loader = DataLoader(CustomDataset(training1), batch_size=batch_size,
+    train_loader = DataLoader(CustomDataset(training), batch_size=batch_size,
                               num_workers=10, pin_memory=True)
-    val_loader = DataLoader(CustomDataset(validation1), batch_size=batch_size,
+    val_loader = DataLoader(CustomDataset(validation), batch_size=batch_size,
                             num_workers=10, pin_memory=True)
     
     checkpoint_callback = ModelCheckpoint(dirpath="",
@@ -99,4 +122,4 @@ def main():
     trainer.save_checkpoint(latest_checkpoint)
 
 if __name__ == '__main__':
-    main()
+    init()

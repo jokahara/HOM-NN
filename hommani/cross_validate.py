@@ -68,17 +68,12 @@ def init():
     if m_type != 'ani':
         print("Error: incorrect model type given. (expecting ani)"); exit()
 
-    ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=m_index)
-    
-    ckpt = torch.load(ckpt_path)
-    print(ckpt['epoch'])
-
-
     energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
     data, kfold, energy_shifter = load_data(args.data, split=8, energy_shifter=energy_shifter)
     print('Self atomic energies: ', energy_shifter.self_energies)
     train_loader, val_loader = CustomDataset.get_train_val_loaders(data, 256, kfold, m_index)
 
+    ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=m_index)
     if ckpt_path:
         # restart from latest checkpoint
         print("Restarting training from checkpoint "+ckpt_path)

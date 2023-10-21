@@ -12,12 +12,16 @@ from torchani.units import hartree2kcalmol
 
 
 class CustomAniNet(L.LightningModule):
-    def __init__(self, pretrained_model=None, train_on="H,C,N,O,S".split(',')):
+    def __init__(self, pretrained_model=None, energy_shifter=None, train_on="H,C,N,O,S".split(',')):
         super().__init__()
         if pretrained_model == None:
             print('Error! Pretrained model was not loaded!'); exit()
-
-        self.energy_shifter = pretrained_model.energy_shifter
+        
+        if energy_shifter == None:
+            self.energy_shifter = pretrained_model.energy_shifter
+        else:
+            self.energy_shifter = energy_shifter
+            
         self.species_to_tensor = pretrained_model.species_to_tensor
         self.species = pretrained_model.species
         self.species_to_train = train_on

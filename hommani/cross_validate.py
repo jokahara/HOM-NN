@@ -57,60 +57,62 @@ def init():
 
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
 
+    m_index = args.i
     latest_checkpoint = args.restart+"-"+str(m_index)+'.ckpt'
-    ls = os.listdir()
-    for file in ls:
-        s = file.split('.')
-        if s[-1] == 'ckpt':
-            if s[0].split('-')[0] == args.restart:
-                latest_checkpoint = file
-    
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
+    
+    #checkpoint_files = filter(lambda s: s.split('.')[-1] == 'ckpt', os.listdir())
+    #ckpt_path = list(checkpoint_files)[-1]
 
     m_type = args.model.lower()
     if m_type != 'ani':
         print("Error: incorrect model type given. (expecting ani)"); exit()
 
-    m_index = args.i
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=m_index)
     
-    if args.init != '':
-        print('Training '+m_type+'-model initialized from '+args.init)
-        model = CustomAniNet(ani2x)
-        model.nn.load_state_dict(torch.load(args.init, map_location=device))
-    elif ckpt_path:
-        # load from latest checkpoint
-        print("Restarting training from checkpoint "+ckpt_path)
-        model = CustomAniNet.load_from_checkpoint(ckpt_path, pretrained_model=ani2x)
-    else:
-        print('Training '+m_type+'-model initialized from index '+str(m_index))
-        # Initialize from pretrained ANI-2x model
-        model = CustomAniNet(ani2x)
-    
-    model.species_to_train = args.atoms.split(',')
-    print("Training on atoms:", model.species_to_train)
-    
+    ckpt = torch.load(ckpt_path)
+    print(ckpt['epoch'])
+
+
     energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
     data, kfold, energy_shifter = load_data(args.data, split=8, energy_shifter=energy_shifter)
-    model.energy_shifter = energy_shifter
     print('Self atomic energies: ', energy_shifter.self_energies)
-    
     train_loader, val_loader = CustomDataset.get_train_val_loaders(data, 256, kfold, m_index)
-    
+
+    if ckpt_path:
+        # restart from latest checkpoint
+        print("Restarting training from checkpoint "+ckpt_path)
+        model = CustomAniNet.load_from_checkpoint(ckpt_path, pretrained_model=ani2x, energy_shifter=energy_shifter)
+    else:
+        if args.init != '':
+            print('Training '+m_type+'-model initialized from '+args.init)
+            model = CustomAniNet(ani2x)
+            model.nn.load_state_dict(torch.load(args.init, map_location=device))
+        else:
+            print('Training '+m_type+'-model initialized from index '+str(m_index))
+            # Initialize from pretrained ANI-2x model
+            model = CustomAniNet(ani2x)
+        
+        # best model will be saved at
+        model.best_model_checkpoint = 'best-'+str(m_index)+'.pt'
+
+        model.species_to_train = args.atoms.split(',')
+        print("Training on atoms:", model.species_to_train)
+        
+
     checkpoint_callback = ModelCheckpoint(dirpath="",
-                                          filename=args.restart+"-"+str(m_index)+"-{epoch:02d}",
-                                          save_top_k=2,
-                                          monitor='validation_rmse')
+                                        filename=args.restart+"-"+str(m_index)+"-{epoch:02d}",
+                                        save_top_k=2,
+                                        monitor='validation_rmse')
     trainer = L.Trainer(devices=args.gpus,
                         num_nodes=args.nodes,
                         max_epochs=args.epochs,
                         accumulate_grad_batches=10,
                         check_val_every_n_epoch=1,
-                        accelerator=device,
+                        accelerator=device.type,
                         strategy='ddp_find_unused_parameters_true',
                         callbacks=[checkpoint_callback],
                         log_every_n_steps=1)
-    
     trainer.validate(model, val_loader)
     
     from datetime import datetime

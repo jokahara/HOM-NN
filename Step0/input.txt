@@ -1,0 +1,5 @@
+gpus    4
+epochs  10000
+atom    H,C,N,O,S
+restart latest
+data    /home/jokahara/PhD/Datasets/ACDB_QM7.h5

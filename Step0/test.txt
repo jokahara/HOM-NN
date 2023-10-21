@@ -1,0 +1,6 @@
+gpus    4
+epochs  10
+atom    H,C,N,O,S
+init    best-0-2000.pt
+restart latest
+data    /home/jokahara/PhD/Datasets/ACDB_QM7.h5

@@ -108,10 +108,10 @@ class CustomDataset(Dataset):
     
     def get_test_loader(data, batch_size):
         n = len(data)
+        test_idx = list(range(n))
+        
         data = torchani.data.TransformableIterable(iter(data)).collate(n).cache()
         data = list(data)[0]
-
-        test_idx = list(range(len(data)))
 
         import torch.cuda
         nw = 10 if torch.cuda.is_available() else 8

@@ -52,7 +52,7 @@ def parse_input():
 
     return args
         
-def init():
+def train():
     args = parse_input()
 
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
@@ -120,4 +120,4 @@ def init():
     trainer.save_checkpoint(latest_checkpoint)
 
 if __name__ == '__main__':
-    init()
+    train()

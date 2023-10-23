@@ -12,6 +12,7 @@ from torchani.units import hartree2kcalmol
 
 
 class CustomAniNet(L.LightningModule):
+    
     def __init__(self, pretrained_model=None, energy_shifter=None, train_on="H,C,N,O,S".split(',')):
         super().__init__()
         if pretrained_model == None:
@@ -21,7 +22,7 @@ class CustomAniNet(L.LightningModule):
             self.energy_shifter = pretrained_model.energy_shifter
         else:
             self.energy_shifter = energy_shifter
-            
+
         self.species_to_tensor = pretrained_model.species_to_tensor
         self.species = pretrained_model.species
         self.species_to_train = train_on
@@ -48,6 +49,116 @@ class CustomAniNet(L.LightningModule):
         
         return energies
 
+    
+    def atomic_energies(self, species, coordinates, shift=False, average=False):
+        """Calculates predicted atomic energies of all atoms in a molecule
+
+        see `:method:torchani.BuiltinModel.atomic_energies`
+
+        If average is True (the default) it returns the average over all models
+        (shape (C, A)), otherwise it returns one atomic energy per model (shape
+        (M, C, A))
+        """
+        species, aevs = self.nn.aev_computer((species, coordinates))
+        members_list = []
+        for nnp in self.nn[1]:
+            members_list.append(nnp._atomic_energies((species, aevs)).unsqueeze(0))
+        member_atomic_energies = torch.cat(members_list, dim=0)
+        
+        if shift:
+            self_energies = self.energy_shifter.self_energies.clone().to(species.device)
+            self_energies = self_energies[species]
+            self_energies[species == torch.tensor(-1, device=species.device)] = torch.tensor(0, device=species.device, dtype=torch.double)
+            # shift all atomic energies individually
+            assert self_energies.shape == member_atomic_energies.shape[1:]
+            member_atomic_energies += self_energies
+        if average:
+            return member_atomic_energies.mean(dim=0)
+        return member_atomic_energies
+    
+    def members_energies(self, species, coordinates, shift=False):
+        """Calculates predicted energies of all member modules
+
+        ..warning::
+            Since this function does not call ``__call__`` directly,
+            hooks are not registered and profiling is not done correctly by
+            pytorch on it. It is meant as a convenience function for analysis
+             and active learning.
+
+        .. note:: The coordinates, and cell are in Angstrom, and the energies
+            will be in Hartree.
+
+        Args:
+            species_coordinates: minibatch of configurations
+            cell: the cell used in PBC computation, set to None if PBC is not enabled
+            pbc: the bool tensor indicating which direction PBC is enabled, set to None if PBC is not enabled
+
+        Returns:
+            species_energies: species and energies for the given configurations
+                note that the shape of species is (C, A), where C is
+                the number of configurations and A the number of atoms, and
+                the shape of energies is (M, C), where M is the number
+                of modules in the ensemble
+
+        """
+        species, aevs = self.nn[0]((species, coordinates))
+        member_outputs = []
+        for nnp in self.nn[1]:
+            energies = nnp((species, aevs)).energies
+            if shift:
+                energies = self.energy_shifter((species, energies)).energies
+            member_outputs.append(energies.unsqueeze(0))
+
+        return torch.cat(member_outputs, dim=0)
+    
+    def energies_qbcs(self, species, coordinates, unbiased=True):
+        """Calculates predicted predicted energies and qbc factors
+
+        QBC factors are used for query-by-committee (QBC) based active learning
+        (as described in the ANI-1x paper `less-is-more`_ ).
+
+        .. _less-is-more:
+            https://aip.scitation.org/doi/10.1063/1.5023802
+
+        ..warning::
+            Since this function does not call ``__call__`` directly,
+            hooks are not registered and profiling is not done correctly by
+            pytorch on it. It is meant as a convenience function for analysis
+             and active learning.
+
+        .. note:: The coordinates, and cell are in Angstrom, and the energies
+            and qbc factors will be in Hartree.
+
+        Args:
+            species_coordinates: minibatch of configurations
+            cell: the cell used in PBC computation, set to None if PBC is not
+                enabled
+            pbc: the bool tensor indicating which direction PBC is enabled, set
+                to None if PBC is not enabled
+            unbiased: if `True` then Bessel's correction is applied to the
+                standard deviation over the ensemble member's. If `False` Bessel's
+                correction is not applied, True by default.
+
+        Returns:
+            species_energies_qbcs: species, energies and qbc factors for the
+                given configurations note that the shape of species is (C, A),
+                where C is the number of configurations and A the number of
+                atoms, the shape of energies is (C,) and the shape of qbc
+                factors is also (C,).
+        """
+        energies = self.members_energies(species, coordinates)
+
+        # standard deviation is taken across ensemble members
+        qbc_factors = energies.std(0, unbiased=unbiased)
+
+        # rho's (qbc factors) are weighted by dividing by the square root of
+        # the number of atoms in each molecule
+        num_atoms = (species >= 0).sum(dim=1, dtype=energies.dtype)
+        qbc_factors = qbc_factors / num_atoms.sqrt()
+        energies = energies.mean(dim=0)
+        assert qbc_factors.shape == energies.shape
+        return energies, qbc_factors
+    
     def training_step(self, batch, batch_idx):
         species, coordinates, true_forces, true_energies = batch
         AdamW, SGD = self.optimizers()

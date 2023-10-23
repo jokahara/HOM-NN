@@ -6,7 +6,7 @@ import torch
 #from torch import Tensor
 import torch.nn.functional as F
 import pytorch_lightning as L
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 
 import torchani
 #from torchani.units import hartree2kcalmol
@@ -94,7 +94,9 @@ def train():
         model.species_to_train = args.atoms.split(',')
         print("Training on atoms:", model.species_to_train)
         
-
+    early_stopping = EarlyStopping(monitor="learning_rate", 
+                                   patience=args.epochs, # only stop when lr is below minimum
+                                   stopping_threshold=model.early_stopping_learning_rate*0.9)
     checkpoint_callback = ModelCheckpoint(dirpath="",
                                         filename=args.restart+"-"+str(m_index)+"-{epoch:02d}",
                                         save_top_k=2,
@@ -106,10 +108,10 @@ def train():
                         check_val_every_n_epoch=1,
                         accelerator=device.type,
                         strategy='ddp_find_unused_parameters_true',
-                        callbacks=[checkpoint_callback],
+                        callbacks=[early_stopping, checkpoint_callback],
                         log_every_n_steps=1)
     trainer.validate(model, val_loader)
-    
+
     from datetime import datetime
     t0 = datetime.now()
     trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)

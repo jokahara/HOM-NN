@@ -198,18 +198,14 @@ class CustomAniNet(L.LightningModule):
         self.log('validation_rmse', rmse)
         self.log('validation_mae', hartree2kcalmol(self.mae.compute()))
 
-        opt = self.optimizers()
-        if len(opt) == 2 and self.trainer.global_rank == 0:
-            AdamW, SGD = opt
+        if self.trainer.global_rank == 0:
+            AdamW, SGD = self.optimizers()
             AdamW_scheduler, SGD_scheduler = self.lr_schedulers()
-            self.trainer.current_epoch
-
             print('RMSE:', rmse.item(), 'at epoch', AdamW_scheduler.last_epoch + 1)
             
             learning_rate = AdamW.param_groups[0]['lr']
             if learning_rate < self.early_stopping_learning_rate:
-                print('Early stopping:')
-                self.trainer.should_stop = True
+                print('Early stopping at epoch', self.trainer.current_epoch)
             
             # save the best model
             if AdamW_scheduler.is_better(rmse, AdamW_scheduler.best):
@@ -224,7 +220,7 @@ class CustomAniNet(L.LightningModule):
         self.mse.reset()
         self.mae.reset()
         return 
-                            
+    
     def configure_optimizers(self):
         self.automatic_optimization = False
         nn = self.nn[1]
@@ -235,7 +231,7 @@ class CustomAniNet(L.LightningModule):
             params.append({'params': [nn[s][2].weight], 'weight_decay': 0.00001})
             params.append({'params': [nn[s][4].weight], 'weight_decay': 0.000001})
         AdamW = torch.optim.AdamW(params, lr=1e-3)
-
+        
         params = []
         for s in self.species_to_train:
             params.append({'params': [nn[s][2].bias]})

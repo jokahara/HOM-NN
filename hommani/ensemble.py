@@ -43,11 +43,66 @@ def load_ensemble(model_dir, model_prefix):
 
     return model
 
-def sample_qbc():
 
+def evaluate(model, data_loader, return_qbc=True, max_batches=15):
+
+    predicted_energies = []
+    true_energies = []
+    num_atoms = []
+    qbc_factors = []
+
+    model.eval()
+    with torch.no_grad():
+        for i, batch in enumerate(data_loader):
+            print(i+1,'/',len(data_loader), end='\r', flush=True)
+            species, coordinates, _, true = batch
+            num_atoms = np.append(num_atoms, (species >= 0).sum(dim=1, dtype=true.dtype).detach().numpy())
+
+            true_energies = np.append(true_energies, true)
+            
+            # run validation
+            if return_qbc:
+                # mean energy predictions and QBC factors
+                energies, qbcs = model.energies_qbcs(species, coordinates)
+                predicted_energies = np.append(predicted_energies, energies.detach().numpy())
+                qbc_factors = np.append(qbc_factors, qbcs.detach().numpy())
+            else:
+                # ensemble of energies
+                member_energies = model.members_energies(species, coordinates).detach().numpy()
+                if len(predicted_energies) == 0:
+                    predicted_energies = member_energies
+                    continue
+                predicted_energies = np.append(predicted_energies, member_energies, axis=1)
+            
+            if i > max_batches:
+                break
+    model.train()
+    
+    return true_energies, predicted_energies, num_atoms, qbc_factors
+
+def sample_qbc(model, data):
+    model_dir = 'pretrained_model'
+    model_prefix = 'best'
+
+    model = load_ensemble(model_dir, model_prefix)
+
+    batch_size = 256
+    energy_shifter, sae_dict = torchani.neurochem.load_sae(model_dir+'/sae_linfit.dat', return_dict=True)
+    test_data, energy_shifter = load_data('../test/sa.h5')
+
+    print('Self atomic energies: ', energy_shifter.self_energies)
+    model.energy_shifter = energy_shifter
+    
+    if type(data) == str:
+        data = [data]
+
+    loaders = []    
+    for f in data:
+        loaders.append(CustomDataset.get_test_loader())
     pretrain_data = 'ACDB_QM7.pkl'
     new_data = ['sa.h5', 'am_sa.h5']
     return
+
 
 def plot():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))

@@ -31,12 +31,16 @@ def parse_input():
                         help='number of nodes')
     parser.add_argument('--epochs', default=10, type=int, metavar='N',
                         help='maximum number of epochs to run')
+    parser.add_argument('--batch', default=256, type=int, metavar='N',
+                        help='batch size')
     parser.add_argument('--atoms', default='H,C,N,O,S', type=str, metavar='H,C,O',
                         help='atoms to train the model on')
     parser.add_argument('--model', default='ani', type=str, metavar='ANI',
                         help='model to train (index or .pt file)')
     parser.add_argument('--data', default='', type=str, metavar='/path/data.h5',
                         help='path to training data')
+    parser.add_argument('--prev', default='', type=str, metavar='/path/data.pkl',
+                        help='previous training data')
     parser.add_argument('--init', default='', type=str, metavar='best.pt',
                         help='pretrained model')
     parser.add_argument('--restart', default='latest', type=str, metavar='latest',
@@ -52,8 +56,7 @@ def parse_input():
 
     return args
         
-def train():
-    args = parse_input()
+def train(args):
 
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
 
@@ -71,11 +74,13 @@ def train():
     energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
     data, kfold, energy_shifter = load_data(args.data, split=8, energy_shifter=energy_shifter)
     print('Self atomic energies: ', energy_shifter.self_energies)
-    train_loader, val_loader = CustomDataset.get_train_val_loaders(data, 256, kfold, m_index)
+
+    batch_size = args.batch
+    train_loader, val_loader = CustomDataset.get_train_val_loaders(data, batch_size, kfold, m_index)
 
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=m_index)
     if ckpt_path:
-        # restart from latest checkpoint
+        # restarting from latest checkpoint
         print("Restarting training from checkpoint "+ckpt_path)
         model = CustomAniNet.load_from_checkpoint(ckpt_path, pretrained_model=ani2x, energy_shifter=energy_shifter)
     else:
@@ -93,13 +98,17 @@ def train():
 
         model.species_to_train = args.atoms.split(',')
         print("Training on atoms:", model.species_to_train)
-        
+    
+    model.energy_shifter = energy_shifter
+    
+    # stop training when learning rate is below minimum value
     early_stopping = EarlyStopping(monitor="learning_rate", 
-                                   patience=args.epochs, # only stop when lr is below minimum
+                                   patience=args.epochs, 
                                    stopping_threshold=model.early_stopping_learning_rate*0.9)
+    # checkpoint format: latest-2-epoch==10.ckpt
     checkpoint_callback = ModelCheckpoint(dirpath="",
                                         filename=args.restart+"-"+str(m_index)+"-{epoch:02d}",
-                                        save_top_k=2,
+                                        save_top_k=1,
                                         monitor='validation_rmse')
     trainer = L.Trainer(devices=args.gpus,
                         num_nodes=args.nodes,
@@ -111,7 +120,7 @@ def train():
                         callbacks=[early_stopping, checkpoint_callback],
                         log_every_n_steps=1)
     trainer.validate(model, val_loader)
-
+    
     from datetime import datetime
     t0 = datetime.now()
     trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
@@ -122,4 +131,5 @@ def train():
     trainer.save_checkpoint(latest_checkpoint)
 
 if __name__ == '__main__':
-    train()
+    args = parse_input()
+    train(args)

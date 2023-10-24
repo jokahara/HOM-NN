@@ -1,6 +1,7 @@
-gpus    4
+gpus    2
 epochs  10
 atom    H,C,N,O,S
+batch   256
 init    best-ACDB.pt
 restart latest
 data    /home/jokahara/PhD/Datasets/ACDB_QM7.h5

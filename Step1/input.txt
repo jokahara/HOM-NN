@@ -1,0 +1,6 @@
+gpus    4
+epochs  10000
+atom    H,C,N,O,S
+restart latest
+data    /scratch/hvehkama/kaharaja/Datasets/sa_am.h5
+prev    ../Step0/ACDB_QM7.pkl

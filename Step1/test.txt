@@ -1,0 +1,8 @@
+gpus    4
+epochs  10
+atom    H,C,N,O,S
+batch   256
+init    best-ACDB.pt
+restart latest
+data    /home/jokahara/PhD/Datasets/sa_am.h5
+prev    ../Step0/ACDB_QM7.pkl

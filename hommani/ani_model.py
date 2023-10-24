@@ -1,6 +1,5 @@
-import math
+
 from typing import Any, Dict, Tuple, Optional
-from pytorch_lightning.utilities.types import STEP_OUTPUT
 
 import torch
 from torch import nn, Tensor
@@ -163,7 +162,7 @@ class CustomAniNet(L.LightningModule):
         species, coordinates, true_forces, true_energies = batch
         AdamW, SGD = self.optimizers()
 
-        #predicted_energies = self(species, coordinates, return_forces=False)
+        #predicted_energies = self(species, coordinates)
         predicted_energies, forces = self(species, coordinates, return_forces=True)
         num_atoms = (species >= 0).sum(dim=1, dtype=true_energies.dtype)
 
@@ -198,7 +197,8 @@ class CustomAniNet(L.LightningModule):
         self.log('validation_rmse', rmse)
         self.log('validation_mae', hartree2kcalmol(self.mae.compute()))
 
-        if self.trainer.global_rank == 0:
+        # in case configure_optimizers() has not been run yet
+        if len(self.optimizers()) == 2 and self.trainer.global_rank == 0:
             AdamW, SGD = self.optimizers()
             AdamW_scheduler, SGD_scheduler = self.lr_schedulers()
             print('RMSE:', rmse.item(), 'at epoch', AdamW_scheduler.last_epoch + 1)
@@ -216,6 +216,9 @@ class CustomAniNet(L.LightningModule):
 
             AdamW_scheduler.step(rmse)
             SGD_scheduler.step(rmse)
+        else:
+            # makes sure 'learning_rate' is logged at least once
+            self.log('learning_rate', 1e-3, rank_zero_only=True)
 
         self.mse.reset()
         self.mae.reset()
@@ -239,8 +242,8 @@ class CustomAniNet(L.LightningModule):
         SGD = torch.optim.SGD(params, lr=1e-3)
 
         # Setting up a learning rate scheduler to do learning rate decay
-        AdamW_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(AdamW, factor=0.5, patience=100, threshold=0)
-        SGD_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(SGD, factor=0.5, patience=100, threshold=0)
-        
+        AdamW_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(AdamW, factor=0.5, patience=1, threshold=0)
+        SGD_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(SGD, factor=0.5, patience=1, threshold=0)
+
         return [AdamW, SGD], [AdamW_scheduler, SGD_scheduler]
     

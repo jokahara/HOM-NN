@@ -26,7 +26,6 @@ def load_ensemble(model_dir, model_prefix):
 
     ani2x = torchani.models.ANI2x(periodic_table_index=False)
     model = CustomAniNet(ani2x)
-
     
     model_files = list(filter(lambda f: f.split('-')[0]==model_prefix, os.listdir(model_dir)))
     for f in model_files:
@@ -77,7 +76,7 @@ def evaluate(model, data_loader, return_qbc=True, max_batches=15):
             if i > max_batches:
                 break
     model.train()
-    
+
     return true_energies, predicted_energies, num_atoms, qbc_factors
 
 def sample_qbc(model, data):

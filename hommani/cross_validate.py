@@ -23,7 +23,7 @@ def parse_input():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', default=None, type=argparse.FileType('r'), metavar='file.txt',
                         help='input file with arguments')
-    parser.add_argument('-i', default=0, type=int, metavar='N',
+    parser.add_argument('-i', default=0, type=int, metavar='i',
                         help='model index (0-7)')
     parser.add_argument('--gpus', default=1, type=int, metavar='N',
                         help='number of GPUs per node')
@@ -37,7 +37,7 @@ def parse_input():
                         help='atoms to train the model on')
     parser.add_argument('--model', default='ani', type=str, metavar='ANI',
                         help='model to train (index or .pt file)')
-    parser.add_argument('--data', default='', type=str, metavar='/path/data.h5',
+    parser.add_argument('--data', default='', type=str, nargs='+', metavar='/path/data.h5',
                         help='path to training data')
     parser.add_argument('--prev', default='', type=str, metavar='/path/data.pkl',
                         help='previous training data')
@@ -45,38 +45,52 @@ def parse_input():
                         help='pretrained model')
     parser.add_argument('--restart', default='latest', type=str, metavar='latest',
                         help='prefix for checkpoint files')
+    parser.add_argument('--test', default=0.0, type=float, metavar='s',
+                        help='fraction of data used for testing (default 0)')
     args = parser.parse_args()
     if args.f:
-        for arg in args.f.readlines():
-            arg = list(filter(None, ('--'+arg.strip()).split(' ') ))
-            args = parser.parse_args(arg, args)
+        lines = ' '.join(args.f.readlines()).split()
+        args = parser.parse_args(lines, args)
     
     if args.data == '':
         print('Error: --data input file was not found');exit()
-
+    print(args)
     return args
         
-def train(args):
-
+def cross_validate(args=None):
+    if args == None:
+        args = parse_input()
+        
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
 
     m_index = args.i
     latest_checkpoint = args.restart+"-"+str(m_index)+'.ckpt'
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
-    
-    #checkpoint_files = filter(lambda s: s.split('.')[-1] == 'ckpt', os.listdir())
-    #ckpt_path = list(checkpoint_files)[-1]
 
     m_type = args.model.lower()
     if m_type != 'ani':
         print("Error: incorrect model type given. (expecting ani)"); exit()
 
     energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
-    data, kfold, energy_shifter = load_data(args.data, split=8, energy_shifter=energy_shifter)
+
+    train_val = []
+    kfold = []
+    for file in args.data:
+        data, _, indeces, _ = load_data(file, kfold=8, train_test_split=1-args.test, 
+                                                     energy_shifter=energy_shifter)
+        train_val.append(data)
+        kfold.append(indeces)
+    if args.prev != '':
+        data, _, indeces, _ = load_data(args.prev, kfold=8, energy_shifter=energy_shifter)
+        train_val.append(data)
+        kfold.append(indeces)
+
+    train_val, kfold = CustomDataset.merge_datasets(train_val, kfold)
+
     print('Self atomic energies: ', energy_shifter.self_energies)
 
     batch_size = args.batch
-    train_loader, val_loader = CustomDataset.get_train_val_loaders(data, batch_size, kfold, m_index)
+    train_loader, val_loader = CustomDataset.get_train_val_loaders(train_val, batch_size, kfold[m_index])
 
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=m_index)
     if ckpt_path:
@@ -105,7 +119,7 @@ def train(args):
     early_stopping = EarlyStopping(monitor="learning_rate", 
                                    patience=args.epochs, 
                                    stopping_threshold=model.early_stopping_learning_rate*0.9)
-    # checkpoint format: latest-2-epoch==10.ckpt
+    # checkpoint format: latest-i-epoch==N.ckpt
     checkpoint_callback = ModelCheckpoint(dirpath="",
                                         filename=args.restart+"-"+str(m_index)+"-{epoch:02d}",
                                         save_top_k=1,
@@ -132,4 +146,4 @@ def train(args):
 
 if __name__ == '__main__':
     args = parse_input()
-    train(args)
+    cross_validate(args)

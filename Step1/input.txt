@@ -1,6 +1,10 @@
-gpus    4
-epochs  10000
-atom    H,C,N,O,S
-restart latest
-data    /scratch/hvehkama/kaharaja/Datasets/sa_am.h5
-prev    ../Step0/ACDB_QM7.pkl
+--gpus    4
+--batch   2560
+--epochs  10000
+--atom    H,C,N,O,S
+--restart latest
+--data    /scratch/hvehkama/kaharaja/Datasets/am_sa.h5
+          /scratch/hvehkama/kaharaja/Datasets/acid_base.h5
+          /scratch/hvehkama/kaharaja/Datasets/organics.h5
+--prev    ../Step0/ACDB_QM7.pkl
+--test    0.5

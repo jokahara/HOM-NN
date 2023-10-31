@@ -23,9 +23,6 @@ def sample():
 
 def main():
     args = parse_input()
-    print(args)
-    args.i = 1
-    print(args);exit()
 
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
 

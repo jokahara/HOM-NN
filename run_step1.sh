@@ -1,4 +1,6 @@
 #!/bin/bash
 cd Step1
-sbatch ../gpurun.sh active_learning.py -f input.txt;
+for i in $(seq 0 7);
+    sbatch ../gpurun.sh ../hommani/cross_validate.py -i $i -f input.txt;
+done
 cd ..

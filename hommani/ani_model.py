@@ -242,8 +242,8 @@ class CustomAniNet(L.LightningModule):
         SGD = torch.optim.SGD(params, lr=1e-3)
 
         # Setting up a learning rate scheduler to do learning rate decay
-        AdamW_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(AdamW, factor=0.5, patience=1, threshold=0)
-        SGD_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(SGD, factor=0.5, patience=1, threshold=0)
+        AdamW_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(AdamW, factor=0.5, patience=100, threshold=0)
+        SGD_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(SGD, factor=0.5, patience=100, threshold=0)
 
         return [AdamW, SGD], [AdamW_scheduler, SGD_scheduler]
     

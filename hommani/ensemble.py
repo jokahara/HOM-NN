@@ -29,11 +29,15 @@ def load_ensemble(model_dir, model_prefix):
     
     model_files = list(filter(lambda f: f.split('-')[0]==model_prefix, os.listdir(model_dir)))
     for f in model_files:
-        i = int(f.split('-')[-1].split('.')[0])
+        try:
+            i = int(f.split('-')[-1].split('.')[0])
+        except:
+            continue
+        
         print('Loading '+f)
         fpath = model_dir+'/'+f
         state_dict = torch.load(fpath, map_location=device)
-        # only take
+        
         dict_filter = filter(lambda kv: kv[0].split('.')[0] == '1', state_dict.items())
         state_dict = {k[2:]: v for k,v in dict_filter}
 
@@ -41,6 +45,42 @@ def load_ensemble(model_dir, model_prefix):
         #model[i].neural_networks.load_state_dict(state_dict)
 
     return model
+
+def sample_qbc(model, data_loader):
+    n = len(data_loader.dataset)
+    predicted_energies = []
+    true_energies = []
+    qbc_factors = []
+    with torch.no_grad():
+        for i, batch in enumerate(data_loader):
+            species, coordinates, _, true = batch
+
+            # run validation
+            true_energies = np.append(true_energies, true)
+            
+            # mean energy prediction
+            energies, qbcs = model.energies_qbcs(species, coordinates)
+            predicted_energies = np.append(predicted_energies, energies.detach().numpy())
+            qbc_factors = np.append(qbc_factors, qbcs.detach().numpy())
+    
+    qbc_factors = hartree2kcalmol(qbc_factors)
+    
+    idx = np.argsort(qbc_factors)
+    ncut = int(len(qbc_factors)*0.95)
+    cutoff = max(0.23, qbc_factors[idx][ncut:][0])
+
+    idx = qbc_factors > cutoff
+    print('Sampled', np.sum(idx), 'clusters with QBC >', cutoff)
+
+    selected = np.arange(n)[qbc_factors > cutoff]
+    fail_rate = round(100*len(selected) / n, 2)
+    print(str(fail_rate)+'% datapoints failed the test')
+
+    #if fail_rate > 5:
+    #    queried_idx = np.random.choice(selected, size=size, replace=False)
+    #else:
+    #    queried_idx = selected
+    return selected, fail_rate
 
 
 def evaluate(model, data_loader, return_qbc=True, max_batches=15):
@@ -79,41 +119,6 @@ def evaluate(model, data_loader, return_qbc=True, max_batches=15):
 
     return true_energies, predicted_energies, num_atoms, qbc_factors
 
-def sample_qbc(model, data_loader):
-    n = len(data_loader.dataset)
-    predicted_energies = []
-    true_energies = []
-    qbc_factors = []
-    with torch.no_grad():
-        for i, batch in enumerate(data_loader):
-            species, coordinates, _, true = batch
-
-            # run validation
-            true_energies = np.append(true_energies, true)
-            
-            # mean energy prediction
-            energies, qbcs = model.energies_qbcs(species, coordinates)
-            predicted_energies = np.append(predicted_energies, energies.detach().numpy())
-            qbc_factors = np.append(qbc_factors, qbcs.detach().numpy())
-    
-    qbc_factors = hartree2kcalmol(qbc_factors)
-    
-    idx = np.argsort(qbc_factors)
-    ncut = int(len(qbc_factors)*0.9)
-    cutoff = max(0.23, qbc_factors[idx][ncut:][0])
-
-    idx = qbc_factors > cutoff
-    print('Sampled', np.sum(idx), 'clusters with QBC >', cutoff)
-
-    selected = np.arange(n)[qbc_factors > cutoff]
-    fail_rate = round(100*len(selected) / n, 2)
-    print(str(fail_rate)+'% datapoints failed the test')
-    
-    #if fail_rate > 5:
-    #    queried_idx = np.random.choice(selected, size=size, replace=False)
-    #else:
-    #    queried_idx = selected
-    return selected, fail_rate
 
 
 def plot():
@@ -135,9 +140,9 @@ def plot():
 
 
     for f in files:
-        _, test, _, energy_shifter = load_data('../Step1/'+f)
-        test_loader = CustomDataset.get_test_loader(list(test), batch_size)
-        
+        train, test, kfold, energy_shifter = load_data('../Step1/'+f)
+        #test_loader = CustomDataset.get_test_loader(list(test), batch_size)
+        _, test_loader = CustomDataset.get_train_val_loaders(train, batch_size, kfold[1])
         predicted_energies = []
         true_energies = []
         num_atoms = []
@@ -148,7 +153,7 @@ def plot():
                 print(i+1,'/',len(test_loader), end='\r', flush=True)
                 species, coordinates, _, true = batch
                 num_atoms = np.append(num_atoms, (species >= 0).sum(dim=1, dtype=true.dtype).detach().numpy())
-
+                print(true[true > 2], species[true > 2], coordinates[true > 2])
                 #shift = energy_shifter((species, true)).energies
                     
                 # run validation
@@ -173,7 +178,7 @@ def plot():
         for i in range(8):
             rmse = np.sqrt(np.mean((x-y[i])**2))
             print(i,'rmse:',rmse)
-        y = np.mean(y, axis=0)
+        y = y[1]#np.mean(y, axis=0)
         rmse = np.sqrt(np.mean((x-y)**2))
         
         print('RMSE = ' + str(rmse) + ' kcal/mol')
@@ -182,8 +187,6 @@ def plot():
         print(str(100*np.sum(loss > 0.4)/len(loss))+'% fail at loss test')
         print(np.sum(loss > 2), 'left outsite range, max = ', np.max(loss))
 
-        print('Sizes:', np.unique(num_atoms))
-
         # absolute errors
         abs_err = np.abs(x-y)
         max_err = hartree2kcalmol(np.max(np.abs(true_energies-predicted_energies), axis=0))
@@ -191,6 +194,8 @@ def plot():
         # standard deviations
         std = np.std(predicted_energies, axis=0)
         qbc_factors = hartree2kcalmol(std / np.sqrt(num_atoms))
+
+        print(str(100*np.sum(qbc_factors > 0.23)/len(qbc_factors))+'% of QBCs are >0.23')
 
         idx = qbc_factors.argsort()
         ncut = int(len(qbc_factors)*0.9)

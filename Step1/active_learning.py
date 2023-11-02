@@ -15,6 +15,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from sklearn.model_selection import KFold
+from hommani.cross_validate import cross_validate, parse_input
 from hommani.ensemble import load_ensemble, sample_qbc
 from hommani.datasets import CustomDataset, load_data, save_pickled_dataset
 
@@ -33,11 +34,13 @@ def sample():
         train, test, kfold, energy_shifter = load_data('../'+f)
         test_loader = CustomDataset.get_test_loader(list(test), 256)
 
+        # sample data above the error threshold
         sample_idx, fail_rate = sample_qbc(model, test_loader)
         
         kf = KFold(n_splits=len(kfold))
         test = list(test)
         
+        # move sampled data to training set
         sampled = TransformableIterable(iter([test[i] for i in sample_idx])).cache()
         test = np.delete(test, sample_idx, axis=0)
         test = TransformableIterable(iter(test)).cache()
@@ -51,4 +54,8 @@ def sample():
 
 
 if __name__ == '__main__':
+    args = parse_input()
     sample()
+    for i in range(8):
+        args.i = i
+        cross_validate(args)

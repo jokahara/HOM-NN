@@ -1,0 +1,9 @@
+COMMAND: JKQC ACDB_monomers_NN.pkl -movie
+COMMAND: JKQC ACDB_monomers_NN.pkl -b -el
+COMMAND: JKQC ACDB_monomers_NN.pkl -b -rg -el
+COMMAND: JKQC ../Datasets/ACDB_monomers_NN.pkl -b -rg -el
+COMMAND: JKQC ../Datasets/ACDB_monomers.pkl -b -rg -el
+COMMAND: JKQC ../Datasets/ACDB_monomers.pkl ACDB_monomers_NN.pkl -out test.pkl
+COMMAND: JKQC -b -rg -el -sort el
+COMMAND: JKQC test.pkl -b -rg -el -sort el
+COMMAND: JKQC test.pkl -b -rg -el -sort el -uniq

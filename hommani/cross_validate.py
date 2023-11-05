@@ -65,7 +65,14 @@ def cross_validate(args=None):
 
     m_index = args.i
     latest_checkpoint = args.restart+"-"+str(m_index)+'.ckpt'
+
+    # looking for a checkpoint file to restart from
     ckpt_path = latest_checkpoint if os.path.isfile(latest_checkpoint) else None
+    if not ckpt_path:
+        ls = sorted(os.listdir())
+        for f in ls:
+            if os.path.isfile(f) and args.restart+"-"+str(m_index) in f:
+                ckpt_path = f
 
     m_type = args.model.lower()
     if m_type != 'ani':

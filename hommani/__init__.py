@@ -6,7 +6,6 @@ from .ani_model import CustomAniNet
 from . import ani_model
 from . import cross_validate
 from . import datasets
-from . import ensemble
 from pkg_resources import get_distribution, DistributionNotFound
 #import warnings
 
@@ -16,4 +15,4 @@ except DistributionNotFound:
     # package is not installed
     pass
 
-__all__ = ['CustomAniNet', 'ani_model', 'cross_validate', 'datasets', 'ensemble']
+__all__ = ['CustomAniNet', 'ani_model', 'cross_validate', 'datasets']

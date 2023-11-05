@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
-#import seaborn
-#seaborn.set()
+import seaborn as sns
+sns.set()
 
 import torch
 from torch import Tensor
@@ -22,37 +22,13 @@ from hommani.datasets import CustomDataset, load_data
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def load_ensemble(model_dir, model_prefix):
-
-    ani2x = torchani.models.ANI2x(periodic_table_index=False)
-    model = CustomAniNet(ani2x)
-    
-    model_files = list(filter(lambda f: f.split('-')[0]==model_prefix, os.listdir(model_dir)))
-    for f in model_files:
-        try:
-            i = int(f.split('-')[-1].split('.')[0])
-        except:
-            continue
-        
-        print('Loading '+f)
-        fpath = model_dir+'/'+f
-        state_dict = torch.load(fpath, map_location=device)
-        
-        dict_filter = filter(lambda kv: kv[0].split('.')[0] == '1', state_dict.items())
-        state_dict = {k[2:]: v for k,v in dict_filter}
-
-        model.nn[1][i].load_state_dict(state_dict)
-        #model[i].neural_networks.load_state_dict(state_dict)
-
-    return model
-
 def plot():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
     model_dir = 'Step1' #'pretrained_model'
     model_prefix = 'best'
 
-    model = load_ensemble(model_dir, model_prefix)
+    model = CustomAniNet.load_ensemble(model_dir, model_prefix)
     model.eval()
 
     batch_size = 256

@@ -8,7 +8,7 @@ import torch
 import pytorch_lightning as L
 
 import torchani
-from torchani.data import TransformableIterable, IterableAdapter
+from torchani.data import TransformableIterable
 from torchani.units import hartree2kcalmol
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from sklearn.model_selection import KFold
 from hommani.cross_validate import cross_validate, parse_input
-from hommani.ensemble import load_ensemble
+from hommani.ani_model import CustomAniNet
 from hommani.datasets import CustomDataset, load_data, save_pickled_dataset
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -103,7 +103,7 @@ def sample():
     model_dir = 'Step1'
     model_prefix = 'best'
 
-    model = load_ensemble(model_dir, model_prefix)
+    model = CustomAniNet.load_ensemble(model_dir, model_prefix)
     files = sys.argv[1:]
 
     for f in files:

@@ -5,9 +5,8 @@ from ase.io.trajectory import Trajectory
 from ase.io import write, read
 from ase.io.xyz import read_xyz
 
-import torch
+import os, sys, torch
 from ase import Atoms
-import torch.utils.tensorboard
 
 import numpy as np
 import pandas as pd
@@ -16,11 +15,15 @@ import pandas as pd
 from torchani.ase import Calculator
 from torchani.units import hartree2kcalmol
 
-from ensemble import load_ensemble, load_data
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
+from hommani.ani_model import CustomAniNet
+from hommani.datasets import load_data
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def optimize(atoms, bond_lim=0.2, dist_lim=1.7):
+def optimize(atoms, bond_lim=0.15, dist_lim=1.7):
 
     from ase.units import Hartree, eV
 
@@ -46,14 +49,8 @@ def optimize(atoms, bond_lim=0.2, dist_lim=1.7):
         opt.step()
         opt.nsteps += 1
 
-        if opt.fmax > 5:
+        if opt.fmax > 2:
             break
-        """
-        de = opt.atoms.get_total_energy() - e0
-        if de > 0:
-            continue
-        if de < -0.01:
-            break"""
 
         d = opt.atoms.get_all_distances()
         if np.abs(d[internal] - d0[internal]).max() > bond_lim:
@@ -62,9 +59,6 @@ def optimize(atoms, bond_lim=0.2, dist_lim=1.7):
             break
     
     print('Step:', opt.nsteps, 'diff = ', opt.atoms.get_total_energy() - e0)#, np.max(np.abs(d[internal] - d0[internal])), np.min(d[external]))
-
-    #trajectory = Trajectory('hist.traj')
-    #write('hist.xyz', trajectory)
 
     return atoms
 
@@ -75,7 +69,7 @@ def opt_sampler(file):
     from torchani.neurochem import load_sae
     energy_shifter = load_sae('pretrained_model/sae_linfit.dat')
 
-    ensemble = load_ensemble(model_dir = 'pretrained_model', model_prefix = 'best')
+    ensemble = CustomAniNet.load_ensemble(model_dir = 'pretrained_model', model_prefix = 'best')
     species_order = ensemble.species
     #species_to_tensor = ensemble.species_to_tensor
 
@@ -94,6 +88,11 @@ def opt_sampler(file):
         
         atoms = optimize(atoms)
 
+        #opt = BFGS(atoms, logfile='-', trajectory='hist.traj')
+        #opt.run(fmax=0.001, steps=500)
+        #trajectory = Trajectory('hist.traj')
+        #write(df.at[i, ('info','file_basename')]+'.xyz', trajectory)
+        
         energy = a*atoms.get_total_energy()
         diff = el - energy
         print('Change:', diff, 'Ha')
@@ -105,14 +104,13 @@ def opt_sampler(file):
         df.at[i, ('info','file_basename')] = df.at[i, ('info','file_basename')]+'_0'
     
     new_file = file.split('/')[-1].split('.')[0]+'_NN.pkl'
-    #print("Saving to "+new_file)
-    #df.to_pickle(new_file)
+    print("Saving to "+new_file)
+    df.to_pickle(new_file)
 
 def main():
-
     _, data, _, energy_shifter = load_data('../Step1/organics.pkl')
 
-    ensemble = load_ensemble(model_dir = 'pretrained_model', model_prefix = 'best')
+    ensemble = CustomAniNet.load_ensemble(model_dir = 'Step1', model_prefix = 'best')
     species_order = ensemble.species
     species_to_tensor = ensemble.species_to_tensor
     print(species_order, species_to_tensor(species_order))
@@ -143,7 +141,7 @@ def main():
     calculator = Calculator(species_order, model)
     
     for i, par in enumerate(data):
-        if i < 10:
+        if i < 11:
             continue
         symbols = np.array(species_order)[par['species']]
         positions = [(x,y,z) for x,y,z in par['coordinates']]
@@ -170,10 +168,12 @@ def main():
     # Now let's minimize the structure:
     print("Begin minimizing...")
 
-    optimize(atoms)
+    opt = BFGS(atoms, logfile='-', trajectory='hist.traj')
+    opt.run(fmax=0.001)
+
     trajectory = Trajectory('hist.traj')
     write('hist.xyz', trajectory)
 
 if __name__ == '__main__':
-    opt_sampler('../Datasets/ACDB_monomers.pkl')
+    opt_sampler(sys.argv[1])
     #main()

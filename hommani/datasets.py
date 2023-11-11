@@ -59,7 +59,10 @@ def load_data(file, kfold=1, train_test_split=0.0, energy_shifter=None, species_
                     data[i]['energies'] -= energy_shifter.self_energies[par['species']].sum().item()
                 data = torchani.data.TransformableIterable(iter(data))
 
-            train = data.shuffle()
+            # filter out extreme outliers
+            filtered = torchani.data.IterableAdapter(lambda: filter(lambda x: abs(x['energies']) < 1.0, data))
+            train = torchani.data.TransformableIterable(filtered).shuffle()
+            
             if train_test_split > 0.0:
                 train, test = train.split(train_test_split, None)
             if kfold > 1:

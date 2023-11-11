@@ -3,8 +3,10 @@ __pycache__
 lightning_logs
 Step*/*pt
 *pkl
+*h5
 */*pkl
 test
 */*png
 *traj
 *xyz
+output

@@ -36,13 +36,12 @@ def plot():
     print('Self atomic energies: ', energy_shifter.self_energies)
     model.energy_shifter = energy_shifter
 
-    #_, test1, _, energy_shifter = load_data('../Step1/ACDB_QM7.pkl')
-    files = ['am_sa.pkl', 'acid_base.pkl', 'organics.pkl']
+    files = ['test_opt.h5']#['am_sa.pkl', 'acid_base.pkl', 'organics.pkl']
 
     for f in files:
-        train, test, kfold, energy_shifter = load_data('../Step1/'+f)
-        test_loader = CustomDataset.get_test_loader(list(test), batch_size)
-        #test_loader,_ = CustomDataset.get_train_val_loaders(train, batch_size, kfold[1])
+        train, test, kfold, energy_shifter = load_data('../'+f, energy_shifter=model.energy_shifter)
+        test_loader = CustomDataset.get_test_loader(list(train), batch_size)
+        #test_loader = CustomDataset.get_train_val_loaders(train, batch_size, kfold[1])
         predicted_energies = []
         true_energies = []
         num_atoms = []
@@ -77,8 +76,8 @@ def plot():
                 
                 predicted_energies = np.append(predicted_energies, member_energies, axis=1)
         
-        x = hartree2kcalmol(true_energies)
-        y = hartree2kcalmol(predicted_energies)
+        x = (true_energies)
+        y = (predicted_energies)
         for i in range(8):
             rmse = np.sqrt(np.mean((x-y[i])**2))
             print(i,'rmse:',rmse)

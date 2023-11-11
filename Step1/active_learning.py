@@ -99,7 +99,7 @@ def sample_qbc(model, data_loader):
 
 def sample():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
-
+    
     model_dir = 'Step1'
     model_prefix = 'best'
 
@@ -134,7 +134,8 @@ def sample():
 
 
 if __name__ == '__main__':
-    sample()
+    globals()[sys.argv[1]]()
+    #sample()
     exit()
     args = parse_input()
     for i in range(8):

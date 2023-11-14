@@ -36,7 +36,7 @@ def plot():
     print('Self atomic energies: ', energy_shifter.self_energies)
     model.energy_shifter = energy_shifter
 
-    files = ['test_opt.h5']#['am_sa.pkl', 'acid_base.pkl', 'organics.pkl']
+    files = ['1am.pkl']#['am_sa.pkl', 'acid_base.pkl', 'organics.pkl']
 
     for f in files:
         train, test, kfold, energy_shifter = load_data('../'+f, energy_shifter=model.energy_shifter)
@@ -76,8 +76,8 @@ def plot():
                 
                 predicted_energies = np.append(predicted_energies, member_energies, axis=1)
         
-        x = (true_energies)
-        y = (predicted_energies)
+        x = hartree2kcalmol(true_energies)
+        y = hartree2kcalmol(predicted_energies)
         for i in range(8):
             rmse = np.sqrt(np.mean((x-y[i])**2))
             print(i,'rmse:',rmse)
@@ -88,7 +88,7 @@ def plot():
         
         # absolute errors
         abs_err = np.abs(x-y)
-        max_err = hartree2kcalmol(np.max(np.abs(true_energies-predicted_energies), axis=0))
+        max_err = np.max(np.abs(x-y), axis=0)
     
         # standard deviations
         std = np.std(predicted_energies, axis=0)

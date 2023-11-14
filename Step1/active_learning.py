@@ -56,10 +56,10 @@ def sample_qbc_max(model, data_loader, qbc_cutoff=0.23, max_cutoff=1.5):
     fail_rate = round(100*len(selected) / n, 2)
     print('Sampled '+str(fail_rate)+'% datapoints above cutoffs')
 
-    #if fail_rate > 5:
-    #    queried_idx = np.random.choice(selected, size=size, replace=False)
-    #else:
-    #    queried_idx = selected
+    if fail_rate > 20:
+        queried_idx = np.random.choice(selected, size=n//5, replace=False)
+    else:
+        queried_idx = selected
     return selected
 
 def sample_qbc(model, data_loader):

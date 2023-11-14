@@ -3,7 +3,7 @@
 --epochs  10000
 --atom    H,C,N,O,S
 --restart latest
---data    /scratch/hvehkama/kaharaja/Datasets/am_sa.h5
+--data    /scratch/hvehkama/kaharaja/Datasets/am_sa.pkl
           /scratch/hvehkama/kaharaja/Datasets/acid_base.h5
           /scratch/hvehkama/kaharaja/Datasets/organics.h5
 --prev    ../Step0/ACDB_QM7.pkl

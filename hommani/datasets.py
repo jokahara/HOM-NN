@@ -1,11 +1,45 @@
-import os
+import os, sys
 import pickle
 import time
 import numpy as np
 from itertools import chain
 
 import torchani
+from torchani.data import TransformableIterable, IterableAdapter
 from torch.utils.data import Dataset, DataLoader
+
+# adapted from torchani.data.load()
+def load_pickle(path):
+
+    def pkl_files(path):
+        """yield file name of all pkl files in a path"""
+        if os.path.isdir(path):
+            for f in os.listdir(path):
+                f = os.path.join(path, f)
+                yield from pkl_files(f)
+        elif os.path.isfile(path) and path.endswith('.pkl'):
+            yield path
+
+    def molecules():
+        for file in pkl_files(path):
+            with open(file, 'rb') as f:
+                df = pickle.load(f)
+            for i in df.index:
+                yield df.loc[i]
+
+    def conformations():
+        for m in molecules():
+            species = m[('xyz','structure')].symbols
+            coordinates = m[('xyz','structure')].positions.astype('float32')
+            energy = m[('log', 'electronic_energy')]
+            ret = {'species': species, 'coordinates': coordinates, 'energies': energy}
+            if 'extra' in m.keys():
+                forces = np.array(m[('extra', 'forces')]).astype('float32')
+                ret['forces'] = forces
+            yield ret
+
+    return TransformableIterable(IterableAdapter(lambda: conformations()))
+
 
 def load_data(file, kfold=1, train_test_split=0.0, energy_shifter=None, species_order=['H', 'C', 'N', 'O', 'S']):
     from mpi4py import MPI
@@ -24,10 +58,8 @@ def load_data(file, kfold=1, train_test_split=0.0, energy_shifter=None, species_
     kfold_indices = None
     test = None
 
-    if dspath[-3:] == 'pkl':
-        pickled_dataset_path = dspath
-    else:
-        pickled_dataset_path = dspath.split('/')[-1].split('.')[0]+'.pkl'
+    pickled_dataset_path = dspath.split('/')[-1].split('.')[0]+'_proc.pkl'
+    
     # We pickle the dataset after loading to ensure we use the same validation set
     # each time we restart training, otherwise we risk mixing the validation and
     # training sets on each restart.
@@ -47,7 +79,7 @@ def load_data(file, kfold=1, train_test_split=0.0, energy_shifter=None, species_
             break
         elif rank == 0:
             print(f'Processing dataset in {dspath}')
-            data = torchani.data.load(dspath, additional_properties=('forces',))
+            data = load_pickle(dspath)
 
             if energy_shifter == None:
                 energy_shifter = torchani.utils.EnergyShifter(None)
@@ -76,7 +108,7 @@ def load_data(file, kfold=1, train_test_split=0.0, energy_shifter=None, species_
             break
         else:
             time.sleep(1) # other ranks wait for rank 0 to process the dataset
-
+    print(energy_shifter.self_energies)
     return train, test, kfold_indices, energy_shifter
 
 def save_pickled_dataset(path, train, energy_shifter, test=None, kfold=None):
@@ -150,3 +182,7 @@ class CustomDataset(Dataset):
                     indeces[k] = (train, val)
         
         return data, indeces
+    
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        load_data(sys.argv[-1])

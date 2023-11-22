@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 from sklearn.model_selection import KFold
 from hommani.cross_validate import cross_validate, parse_input
 from hommani.ani_model import CustomAniNet
-from hommani.datasets import CustomDataset, load_data, save_pickled_dataset
+from hommani.datasets import DataContainer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -100,42 +100,44 @@ def sample_qbc(model, data_loader):
 def sample():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
-    model_dir = 'Step1'
+    model_dir = '../Step1'
     model_prefix = 'best'
 
     model = CustomAniNet.load_ensemble(model_dir, model_prefix)
     files = sys.argv[1:]
 
     for f in files:
-        train, test, kfold, energy_shifter = load_data('../'+f)
-        data_loader = CustomDataset.get_test_loader(list(test), 256)
+        dc = DataContainer.load_data(f)
+        test_loader = dc.get_test_loader()
 
         # sample data above the error threshold
-        sample_idx = sample_qbc_max(model, data_loader)
-        if len(kfold) > len(sample_idx):
+        sample_idx = sample_qbc_max(model, test_loader)
+        if len(dc.kfold) > len(sample_idx):
             print("Too few sampled datapoints. Skipping.")
             continue
 
-        kf = KFold(n_splits=len(kfold))
-        test = list(test)
-        
-        # move sampled data to training set
-        sampled = TransformableIterable(iter([test[i] for i in sample_idx])).cache()
-        test = np.delete(test, sample_idx, axis=0)
-        test = TransformableIterable(iter(test)).cache()
+        test = np.array(list(dc.test))
+        # sampled data
+        sampled = TransformableIterable(test[sample_idx]).cache()
 
-        kfold_indices = list(kf.split(list(range(len(sampled)))))
-        train, kfold = CustomDataset.merge_datasets([train, sampled], [kfold, kfold_indices])
+        test = np.delete(test, sample_idx, axis=0)
+        dc.test = TransformableIterable(test).cache()
+        
+        kf = KFold(n_splits=len(dc.kfold))
+        kfold_indices = list(kf.split(np.arange(len(sampled))))
+        dc_moved = DataContainer(sampled, kfold_idx=kfold_indices)
+
+        new_dc = DataContainer.merge([dc, dc_moved])
         
         print("Saving "+f)
-        save_pickled_dataset(f, train, energy_shifter, test, kfold)
+        new_dc.save(f)
 
     return
 
 
 if __name__ == '__main__':
-    globals()[sys.argv[1]]()
-    #sample()
+    #globals()[sys.argv[1]]()
+    sample()
     exit()
     args = parse_input()
     for i in range(8):

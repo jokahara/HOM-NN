@@ -36,10 +36,10 @@ def plot():
     print('Self atomic energies: ', energy_shifter.self_energies)
     model.energy_shifter = energy_shifter
 
-    files = ['1am.pkl']#['am_sa.pkl', 'acid_base.pkl', 'organics.pkl']
+    files = ['am_sa.nn.pkl', 'acid_base.nn.pkl' 'organics.nn.pkl']
 
     for f in files:
-        train, test, kfold, energy_shifter = load_data('../'+f, energy_shifter=model.energy_shifter)
+        train, test, kfold, energy_shifter = load_data('Step1/'+f, energy_shifter=model.energy_shifter)
         test_loader = CustomDataset.get_test_loader(list(train), batch_size)
         #test_loader = CustomDataset.get_train_val_loaders(train, batch_size, kfold[1])
         predicted_energies = []
@@ -88,7 +88,7 @@ def plot():
         
         # absolute errors
         abs_err = np.abs(x-y)
-        max_err = np.max(np.abs(x-y), axis=0)
+        max_err = np.max(np.abs(predicted_energies-true_energies), axis=0)
     
         # standard deviations
         std = np.std(predicted_energies, axis=0)
@@ -136,7 +136,7 @@ def plot():
             #idx = (num_atoms==n)
             #plt.scatter(abs[idx], qbc_factors[idx], s=2, alpha=0.5, label=str(int(n)))
             #plt.scatter(qbc_factors[idx], max_err[idx]/np.sqrt(num_atoms[idx]), s=2, alpha=0.5, label=str(int(n)))
-        plt.scatter(qbc_factors, max_err/np.sqrt(num_atoms), s=2, alpha=0.5)
+        plt.scatter(qbc_factors, hartree2kcalmol(max_err)/np.sqrt(num_atoms), s=2, alpha=0.5)
 
         print(np.sum(qbc_factors > 1.0) / len(qbc_factors))
 

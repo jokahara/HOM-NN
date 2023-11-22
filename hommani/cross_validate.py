@@ -15,7 +15,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from hommani.ani_model import CustomAniNet
-from hommani.datasets import CustomDataset, load_data
+from hommani.datasets import DataContainer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -83,21 +83,19 @@ def cross_validate(args=None):
     train_val = []
     kfold = []
     for file in args.data:
-        data, _, indeces, _ = load_data(file, kfold=8, train_test_split=1-args.test, 
-                                                     energy_shifter=energy_shifter)
+        data = DataContainer.load_data(file, kfold=8, train_test_split=1-args.test, 
+                                        energy_shifter=energy_shifter)
         train_val.append(data)
-        kfold.append(indeces)
     if args.prev != '':
-        data, _, indeces, _ = load_data(args.prev, kfold=8, energy_shifter=energy_shifter)
+        data = DataContainer.load_data(args.prev, kfold=8, energy_shifter=energy_shifter)
         train_val.append(data)
-        kfold.append(indeces)
 
-    train_val, kfold = CustomDataset.merge_datasets(train_val, kfold)
+    dc = DataContainer.merge(train_val, kfold)
 
     print('Self atomic energies: ', energy_shifter.self_energies)
 
     batch_size = args.batch
-    train_loader, val_loader = CustomDataset.get_train_val_loaders(train_val, batch_size, kfold[m_index])
+    train_loader, val_loader = dc.get_train_val_loaders(k=m_index, batch_size=batch_size)
 
     ani2x = torchani.models.ANI2x(periodic_table_index=False, model_index=m_index)
     if ckpt_path:

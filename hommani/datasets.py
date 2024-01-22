@@ -50,28 +50,34 @@ class DataContainer():
 
         return TransformableIterable(IterableAdapter(lambda: conformations()))
 
-    def load_data(file, kfold=1, train_test_split=0.0, energy_shifter=None, 
-                species_order=['H', 'C', 'N', 'O', 'S'], autosave=True):
+    def load_data(file, kfold=1, train_test_split=1.0, energy_shifter=None, 
+                  species_order=['H', 'C', 'N', 'O', 'S'], autosave=True):
         
-        from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
+        try:
+            from mpi4py import MPI
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+        except: 
+            rank = 0
         
         try:
             path = os.path.dirname(os.path.realpath(__file__))
+            dspath = os.path.join(path, file)
             if not os.path.exists(dspath):
                 raise NameError
         except NameError:
             path = os.getcwd()
 
         dspath = os.path.join(path, file)
-        if not os.path.exists(dspath):
-            print("Error: Dataset file at "+dspath+" not found."); exit()
-        
+        pickled_dataset_path = dspath.split('/')[-1].split('.')[0]+'.nn.pkl'
+
+        if not os.path.isfile(pickled_dataset_path):
+            if not os.path.exists(dspath):
+                print("Error: Dataset file at "+dspath+" not found."); exit()
+            elif dspath[-7:] == '.nn.pkl':
+                pickled_dataset_path = dspath
         kfold_indices = None
         test = None
-        
-        pickled_dataset_path = dspath.split('.')[0]+'.nn.pkl'
         
         # We pickle the dataset after loading to ensure we use the same validation set
         # each time we restart training, otherwise we risk mixing the validation and
@@ -108,8 +114,8 @@ class DataContainer():
                 filtered = IterableAdapter(lambda: filter(lambda x: abs(x['energies']) < 1.0, data))
                 train = TransformableIterable(filtered).shuffle()
                 
-                if train_test_split > 0.0:
-                    if train_test_split >= 1.0:
+                if train_test_split < 1.0:
+                    if train_test_split == 0.0:
                         test = train
                         train = None
                     else:
@@ -188,12 +194,14 @@ class DataContainer():
         tests = []
         kfolds = []
         for d in datasets:
-            if d.train:
+            if d.train != None:
                 trains.append(d.train)
                 kfolds.append(d.kfold)
-            if d.test:
+            if d.test != None:
                 tests.append(d.test)
         
+        train = None
+        test = None
         if len(trains) > 0:
             train = torchani.data.TransformableIterable(chain(*trains)).cache()
         if len(tests) > 0:
@@ -214,9 +222,9 @@ class DataContainer():
 
 
 class CustomDataset(Dataset):
-    def __init__(self, data, indeces=None):
+    def __init__(self, data, indeces):
         self.data = data
-        self.indeces = indeces if indeces != None else list(range(len(data)))
+        self.indeces = indeces
         
     def __len__(self):
         return len(self.indeces)
@@ -231,5 +239,9 @@ class CustomDataset(Dataset):
         return species, coordinates, true_forces, energies
     
 if __name__ == '__main__':
+
     if len(sys.argv) > 1:
-        DataContainer.load_data(sys.argv[-1])
+        dc = DataContainer.load_data(sys.argv[-1], autosave=False)
+        print(len(dc.train), dc.energy_shifter.self_energies)
+        for e in dc.energy_shifter.self_energies:
+            print(e.item())

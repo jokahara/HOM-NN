@@ -161,16 +161,16 @@ class CustomAniNet(L.LightningModule):
         species, coordinates, true_forces, true_energies = batch
         AdamW, SGD = self.optimizers()
 
-        #predicted_energies = self(species, coordinates)
-        predicted_energies, forces = self(species, coordinates, return_forces=True)
+        predicted_energies = self(species, coordinates)
+        #predicted_energies, forces = self(species, coordinates, return_forces=True)
         num_atoms = (species >= 0).sum(dim=1, dtype=true_energies.dtype)
 
         # Now the total loss has two parts, energy loss and force loss
         energy_loss = (self.batch_loss(predicted_energies, true_energies) / num_atoms.sqrt()).mean()
-        force_loss = (self.batch_loss(true_forces, forces).sum(dim=(1, 2)) / num_atoms).mean()
+        #force_loss = (self.batch_loss(true_forces, forces).sum(dim=(1, 2)) / num_atoms).mean()
 
-        force_coefficient = 0.1
-        loss = energy_loss + force_coefficient * force_loss
+        #force_coefficient = 0.1
+        loss = energy_loss #+ force_coefficient * force_loss
 
         AdamW.zero_grad()
         SGD.zero_grad()
@@ -194,7 +194,8 @@ class CustomAniNet(L.LightningModule):
         
         rmse = hartree2kcalmol(self.mse.compute().sqrt())
         self.log('validation_rmse', rmse)
-        self.log('validation_mae', hartree2kcalmol(self.mae.compute()))
+        mae = hartree2kcalmol(self.mae.compute())
+        self.log('validation_mae', mae)
 
         # in case configure_optimizers() has not been run yet
         if len(self.optimizers()) == 2 and self.trainer.global_rank == 0:
@@ -230,14 +231,20 @@ class CustomAniNet(L.LightningModule):
         # Setup optimizers for two middle layers. Input and output layers are kept fixed.
         params = []
         for s in self.species_to_train:
+            #params.append({'params': [nn[s][0].weight]})
             params.append({'params': [nn[s][2].weight], 'weight_decay': 0.00001})
             params.append({'params': [nn[s][4].weight], 'weight_decay': 0.000001})
+            # unlock sulfur
+            #if s == 'S':
+            #params.append({'params': [nn[s][6].weight]})
         AdamW = torch.optim.AdamW(params, lr=1e-3)
         
         params = []
         for s in self.species_to_train:
+            #params.append({'params': [nn[s][0].bias]})
             params.append({'params': [nn[s][2].bias]})
             params.append({'params': [nn[s][4].bias]})
+            #params.append({'params': [nn[s][6].bias]})
         SGD = torch.optim.SGD(params, lr=1e-3)
 
         # Setting up a learning rate scheduler to do learning rate decay
@@ -252,20 +259,24 @@ class CustomAniNet(L.LightningModule):
         import os, torchani.models
         ani2x = torchani.models.ANI2x(periodic_table_index=False)
         model = CustomAniNet(ani2x)
-
+        
         model_files = list(filter(lambda f: f.split('-')[0]==model_prefix, os.listdir(model_dir)))
         for f in model_files:
             try:
-                i = int(f.split('-')[-1].split('.')[0])
+                i = int(f.split('-')[1].split('.')[0])
             except:
                 continue
             
             print('Loading '+f)
             fpath = model_dir+'/'+f
             state_dict = torch.load(fpath, map_location=device)
-            
-            dict_filter = filter(lambda kv: kv[0].split('.')[0] == '1', state_dict.items())
-            state_dict = {k[2:]: v for k,v in dict_filter}
+            if f[-4:] == 'ckpt':
+                state_dict = state_dict['state_dict']
+                dict_filter = filter(lambda kv: kv[0].split('.')[1] == '1', state_dict.items())
+                state_dict = {k[5:]: v for k,v in dict_filter}
+            else:
+                dict_filter = filter(lambda kv: kv[0].split('.')[0] == '1', state_dict.items())
+                state_dict = {k[2:]: v for k,v in dict_filter}
 
             model.nn[1][i].load_state_dict(state_dict)
             #model[i].neural_networks.load_state_dict(state_dict)

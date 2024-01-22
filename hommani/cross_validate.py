@@ -80,17 +80,16 @@ def cross_validate(args=None):
 
     energy_shifter, sae_dict = torchani.neurochem.load_sae('../sae_linfit.dat', return_dict=True)
 
-    train_val = []
-    kfold = []
+    data = []
     for file in args.data:
-        data = DataContainer.load_data(file, kfold=8, train_test_split=1-args.test, 
+        dc = DataContainer.load_data(file, kfold=8, train_test_split=1-args.test, 
                                         energy_shifter=energy_shifter)
-        train_val.append(data)
+        data.append(dc)
     if args.prev != '':
-        data = DataContainer.load_data(args.prev, kfold=8, energy_shifter=energy_shifter)
-        train_val.append(data)
+        dc = DataContainer.load_data(args.prev, kfold=8, energy_shifter=energy_shifter)
+        data.append(dc)
 
-    dc = DataContainer.merge(train_val, kfold)
+    dc = DataContainer.merge(data)
 
     print('Self atomic energies: ', energy_shifter.self_energies)
 
@@ -112,11 +111,11 @@ def cross_validate(args=None):
             # Initialize from pretrained ANI-2x model
             model = CustomAniNet(ani2x)
         
-        # best model will be saved at
-        model.best_model_checkpoint = 'best-'+str(m_index)+'.pt'
+    # best model will be saved at
+    model.best_model_checkpoint = 'best-'+str(m_index)+'.pt'
 
-        model.species_to_train = args.atoms.split(',')
-        print("Training on atoms:", model.species_to_train)
+    model.species_to_train = args.atoms.split(',')
+    print("Training on atoms:", model.species_to_train)
     
     model.energy_shifter = energy_shifter
     
@@ -137,7 +136,8 @@ def cross_validate(args=None):
                         accelerator=device.type,
                         strategy='ddp_find_unused_parameters_true',
                         callbacks=[early_stopping, checkpoint_callback],
-                        log_every_n_steps=1)
+                        log_every_n_steps=1,
+                        num_sanity_val_steps=0)
     trainer.validate(model, val_loader)
     
     from datetime import datetime

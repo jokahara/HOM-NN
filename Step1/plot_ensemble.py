@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
-import seaborn as sns
-sns.set()
+#import seaborn as sns
+#sns.set()
 
 import torch
 from torch import Tensor
@@ -18,30 +18,34 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from hommani.ani_model import CustomAniNet
-from hommani.datasets import CustomDataset, load_data
+from hommani.datasets import DataContainer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def plot():
     print("Using PyTorch {} and Lightning {}".format(torch.__version__, L.__version__))
     
-    model_dir = 'Step1' #'pretrained_model'
-    model_prefix = 'best'
+    model_dir = 'Step2' #'pretrained_model'
+    model_prefix = 'latest'
 
     model = CustomAniNet.load_ensemble(model_dir, model_prefix)
     model.eval()
 
-    batch_size = 256
-    energy_shifter, sae_dict = torchani.neurochem.load_sae('pretrained_model/sae_linfit.dat', return_dict=True)
+    energy_shifter, sae_dict = torchani.neurochem.load_sae('pretrained_model/sae_linfit_new.dat', return_dict=True)
     print('Self atomic energies: ', energy_shifter.self_energies)
     model.energy_shifter = energy_shifter
 
-    files = ['am_sa.nn.pkl', 'acid_base.nn.pkl' 'organics.nn.pkl']
+    #dir = 'Step0'
+    #files = ['qm9.nn.pkl'] 
+    #files = ['am_sa.nn.pkl', 'acid_base.nn.pkl', 'organics.nn.pkl', 'monomers.nn.pkl']
 
+    dir = 'Step2'
+    files = ['medium_1DA1DB.nn.pkl'] 
+    
     for f in files:
-        train, test, kfold, energy_shifter = load_data('Step1/'+f, energy_shifter=model.energy_shifter)
-        test_loader = CustomDataset.get_test_loader(list(train), batch_size)
-        #test_loader = CustomDataset.get_train_val_loaders(train, batch_size, kfold[1])
+        dc = DataContainer.load_data(dir+'/'+f)
+        test_loader = dc.get_test_loader()
+        #test_loader, val_loader = dc.get_train_val_loaders(0)
         predicted_energies = []
         true_energies = []
         num_atoms = []
@@ -49,18 +53,22 @@ def plot():
 
         with torch.no_grad():
             for i, batch in enumerate(test_loader):
+                #if i > 50:
+                #    break
+
                 print(i+1,'/',len(test_loader), end='\r', flush=True)
                 species, coordinates, _, true = batch
+                true_energies = np.append(true_energies, true)
+                continue
                 num_atoms = np.append(num_atoms, (species >= 0).sum(dim=1, dtype=true.dtype).detach().numpy())
 
-                idx = (true > 0.5)
+                idx = (true > 1.0)
                 if len(true[idx]) > 0:
                     print(true[idx], species[idx], coordinates[idx])
                     shift = energy_shifter((species[idx], true[idx])).energies
                     print(shift)
                     
                 # run validation
-                true_energies = np.append(true_energies, true)
                 
                 # mean energy prediction
                 #energies, qbcs = model.energies_qbcs(species, coordinates)
@@ -75,7 +83,9 @@ def plot():
                     continue
                 
                 predicted_energies = np.append(predicted_energies, member_energies, axis=1)
-        
+        plt.hist(true_energies, bins=100)
+        plt.show()
+        exit()
         x = hartree2kcalmol(true_energies)
         y = hartree2kcalmol(predicted_energies)
         for i in range(8):
@@ -83,11 +93,13 @@ def plot():
             print(i,'rmse:',rmse)
         y = np.mean(y, axis=0)
         rmse = np.sqrt(np.mean((x-y)**2))
+        mae = np.mean(np.abs(x-y))
         
         print('RMSE = ' + str(rmse) + ' kcal/mol')
+        print('MAE = ' + str(mae) + ' kcal/mol')
         
         # absolute errors
-        abs_err = np.abs(x-y)
+        abs_err = np.abs(predicted_energies-true_energies)
         max_err = np.max(np.abs(predicted_energies-true_energies), axis=0)
     
         # standard deviations
@@ -95,10 +107,6 @@ def plot():
         qbc_factors = hartree2kcalmol(std / np.sqrt(num_atoms))
 
         print(str(100*np.sum(qbc_factors > 0.23)/len(qbc_factors))+'% of QBCs are >0.23')
-
-        idx = qbc_factors.argsort()
-        ncut = int(len(qbc_factors)*0.9)
-        cutoff = qbc_factors[idx][ncut:][0]
 
         # density coloring
         xy = np.vstack([x,y])
@@ -110,7 +118,7 @@ def plot():
 
         plt.subplot(121)
         #plt.errorbar(x, y, yerr=std_err, fmt='.')
-        plt.scatter(x, y, alpha=0.5, s=2, label=f)
+        plt.scatter(x, y, c=z, alpha=0.5, s=2, label=f.split('.')[0])
         #for n in np.unique(num_atoms):
             #idx = (num_atoms==n)
             #plt.scatter(x[idx], y[idx], s=2, alpha=0.5, label=str(int(n)))
@@ -122,7 +130,7 @@ def plot():
         #rand = rand[:ncut//5] # 2% off total data
         #plt.scatter(x[idx][rand], y[idx][rand], s=4, c='black')
         
-        plt.legend()
+        #plt.legend()
 
         #plt.plot(x, y, '.')
         plt.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'r--', lw=1)
@@ -136,7 +144,16 @@ def plot():
             #idx = (num_atoms==n)
             #plt.scatter(abs[idx], qbc_factors[idx], s=2, alpha=0.5, label=str(int(n)))
             #plt.scatter(qbc_factors[idx], max_err[idx]/np.sqrt(num_atoms[idx]), s=2, alpha=0.5, label=str(int(n)))
-        plt.scatter(qbc_factors, hartree2kcalmol(max_err)/np.sqrt(num_atoms), s=2, alpha=0.5)
+
+        x = qbc_factors
+        y = hartree2kcalmol(max_err)/np.sqrt(num_atoms)
+
+        xy = np.vstack([x,y])
+        z = gaussian_kde(xy)(xy)
+        idx = z.argsort()
+        x, y, z = x[idx], y[idx], z[idx]
+
+        plt.scatter(x, y, c=z, s=2, alpha=0.5)
 
         print(np.sum(qbc_factors > 1.0) / len(qbc_factors))
 

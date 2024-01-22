@@ -13,7 +13,7 @@ def add_to_test(pickled_dataset_path, files):
     for f in files:
         if not os.path.isfile(f):
             print('Error! File '+f+' not found')
-        d = DataContainer.load_data(f, train_test_split=1, 
+        d = DataContainer.load_data(f, train_test_split=0, 
                                     energy_shifter=pickled_data.energy_shifter, 
                                     autosave=False)
         datasets.append(d)

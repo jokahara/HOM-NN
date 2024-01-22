@@ -3,8 +3,9 @@
 --epochs  10000
 --atom    H,C,N,O,S
 --restart latest
---data    /scratch/hvehkama/kaharaja/Datasets/am_sa.pkl
-          /scratch/hvehkama/kaharaja/Datasets/acid_base.h5
-          /scratch/hvehkama/kaharaja/Datasets/organics.h5
+--data    /scratch/hvehkama/kaharaja/Datasets/ammonia/am_sa.pkl
+          /scratch/hvehkama/kaharaja/Datasets/acid_base/acid_base.pkl
+          /scratch/hvehkama/kaharaja/Datasets/organics/organics.pkl          
+          /scratch/hvehkama/kaharaja/Datasets/Monomers/collectionORCA.pkl
 --prev    ../Step0/ACDB_QM7.pkl
 --test    0.5

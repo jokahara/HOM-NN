@@ -2,5 +2,5 @@
 --epochs  10000
 --atom    H,C,N,O,S
 --restart latest
---data    /home/jokahara/PhD/Datasets/ACDB_QM7.h5 
-          /home/jokahara/PhD/Datasets/sa_am.h5
+--data    /scratch/hvehkama/kaharaja/Datasets/ACDB/ACDB_QM7.pkl 
+          /scratch/hvehkama/kaharaja/Datasets/QMx/qm9

@@ -12,12 +12,9 @@ def print_info(paths):
     k = [] 
     te = [] 
     e = []
-
     for pickled_dataset_path in paths:
         f.append(pickled_dataset_path.split('/')[-1].split('.')[0])
         dc = DataContainer.load_data(pickled_dataset_path, autosave=False)
-        
-        print(dc.train)
         if dc.train == None:
             tr.append(0)
         else:
@@ -37,7 +34,8 @@ def print_info(paths):
             e.append(None)
         else:
             e.append(dc.energy_shifter.self_energies)
-    
+            
+    print(len(dc.train), len(dc.test))
     print('')
     print(f'file           |    train | k |     test | energy shifter')
     print('----------------------------------------------------------')
@@ -50,7 +48,7 @@ def print_info(paths):
         elif False in (se == e[i]):
             match = 'DID NOT MATCH'
         print(f'{f[i]:15}| {tr[i]:8} |{k[i]:2} | {te[i]:8} | {match}')
-
+    
     print('----------------------------------------------------------')
     print('Self energies: ', list(se.numpy()))
     print('')
